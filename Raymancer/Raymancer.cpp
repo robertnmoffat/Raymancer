@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <cassert>
 
+#define M_PI 3.14159265358979323846264338327950288
+
 void draw_rectangle(std::vector<uint32_t> &img, const size_t img_w, const size_t img_h, const size_t x, const size_t y, const size_t w, const size_t h, const uint32_t color){
     assert(img.size() == img_w * img_h);
     for (int i = 0; i < w; i++) {
@@ -72,6 +74,8 @@ int main()
 
     float player_x = 3.456f;
     float player_y = 2.345f;
+    float player_a = 1.523f;
+    float fov = M_PI/3;
 
     for (size_t j = 0; j < win_h; j++) {
         for (size_t i = 0; i < win_w; i++) {
@@ -97,6 +101,20 @@ int main()
 
     //Draw player on map
     draw_rectangle(framebuffer, win_w, win_h, player_x*rect_w, player_y*rect_h, 5,5, pack_color(255,255,255));
+
+    //raycast from player view
+    for (float i = 0; i < win_w; i++) {
+        for (float t = 0.0f; t < 20.0f; t += 0.05f) {
+            float angle = player_a - (fov / 2) + fov * (i / win_w);//start at player angle - half fov, then add 
+            float cx = player_x + t * cos(angle);
+            float cy = player_y + t * sin(angle);
+            if (map[(int)cx + (int)cy * map_w] != ' ')break;
+
+            size_t pix_x = cx * rect_w;
+            size_t pix_y = cy * rect_h;
+            framebuffer[pix_x + pix_y * win_w] = pack_color(255, 255, 255);
+        }
+    }
 
     drop_ppm_image("./out.ppm", framebuffer, win_w, win_h);
     
