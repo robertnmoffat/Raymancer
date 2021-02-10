@@ -15,7 +15,7 @@ void draw_rectangle(std::vector<uint32_t> &img, const size_t img_w, const size_t
         for (int j = 0; j < h; j++) {
             size_t cx = x + i;
             size_t cy = y + j;
-            assert(cx < img_w&& cy < img_h);
+            if (cx >= img_w || cy >= img_h)continue;
             img[cx + cy * img_w] = color;
         }
     }
@@ -48,9 +48,11 @@ void drop_ppm_image(const std::string filename, const std::vector<uint32_t> &ima
 
 int main()
 {
-    const size_t win_w = 512;//image width
+    const size_t win_w = 1024;//image width
     const size_t win_h = 512;//image height
     std::vector<uint32_t> framebuffer(win_w*win_h, 255);
+    std::vector<uint32_t> screenBuffer(win_w * win_h, 255);
+
 
     const size_t map_w = 16;
     const size_t map_h = 16;
@@ -83,6 +85,7 @@ int main()
             uint8_t g = 255 * i / float(win_w);
             uint8_t b = 0;
             framebuffer[i + j * win_w] = pack_color(r, g, b);
+            screenBuffer[i + j * win_w] = pack_color(255,255,255);
         }
     }
 
@@ -103,20 +106,30 @@ int main()
     draw_rectangle(framebuffer, win_w, win_h, player_x*rect_w, player_y*rect_h, 5,5, pack_color(255,255,255));
 
     //raycast from player view
-    for (float i = 0; i < win_w; i++) {
-        for (float t = 0.0f; t < 20.0f; t += 0.05f) {
+    for (float i = 0; i < win_w; i++) {//do for window width so that you have a ray for every horizontal pixel after
+        float t = 0.0f;
+        for (; t < 20.0f; t += 0.05f) {
             float angle = player_a - (fov / 2) + fov * (i / win_w);//start at player angle - half fov, then add 
             float cx = player_x + t * cos(angle);
             float cy = player_y + t * sin(angle);
             if (map[(int)cx + (int)cy * map_w] != ' ')break;
 
+            //printf("%f\n", t);
             size_t pix_x = cx * rect_w;
             size_t pix_y = cy * rect_h;
-            framebuffer[pix_x + pix_y * win_w] = pack_color(255, 255, 255);
+            framebuffer[pix_x + pix_y * win_w] = pack_color(255, 255, 255);            
         }
+
+        float vertLength = win_h / (t + 0.01f);
+        printf("%f - %f C:%f\n", vertLength, i, (t * 10) / 255);
+        //if (vertLength > win_h)vertLength = win_h;
+        float startPos = win_h / 2 - vertLength / 2;
+        draw_rectangle(screenBuffer, win_w, win_h, i, startPos, 1, vertLength, pack_color(0, (t*10), 255));
     }
 
+
     drop_ppm_image("./out.ppm", framebuffer, win_w, win_h);
+    drop_ppm_image("./firstPerson.ppm", screenBuffer, win_w, win_h);
     
     return 0;
 }
