@@ -6,6 +6,8 @@
 #include <vector>
 #include <cstdint>
 #include <cassert>
+#include <sstream>
+#include <iomanip>
 
 #define M_PI 3.14159265358979323846264338327950288
 
@@ -127,30 +129,44 @@ int main()
     draw_rectangle(framebuffer, win_w, win_h, player_x*rect_w, player_y*rect_h, 5,5, pack_color(255,255,255));
 
     //--------------------------RAYCAST FROM PLAYER VIEW-----------------------
-    for (float i = 0; i < win_w; i++) {//do for window width so that you have a ray for every horizontal pixel after
-        float t = 0.0f;
-        for (; t < 20.0f; t += 0.05f) {
-            float angle = player_a - (fov / 2) + fov * (i / win_w);//start at player angle - half fov, then add 
-            float cx = player_x + t * cos(angle);
-            float cy = player_y + t * sin(angle);
-            if (map[(int)cx + (int)cy * map_w] != ' ')break;
+    for (int frame = 1; frame < 360; frame++) {
+        player_a += 2*M_PI/360;
 
-            //printf("%f\n", t);
-            size_t pix_x = cx * rect_w;
-            size_t pix_y = cy * rect_h;
-            framebuffer[pix_x + pix_y * win_w] = pack_color(255, 255, 255);            
+        screenBuffer = std::vector<uint32_t>(win_w * win_h, pack_color(255, 255, 255));        
+
+        std::stringstream ss;
+        ss << std::setfill('0') << std::setw(5) << frame << ".ppm";
+        //printing current output
+        std::cout << ss.str() << std::endl;
+
+        for (float i = 0; i < win_w; i++) {//do for window width so that you have a ray for every horizontal pixel after
+            float t = 0.0f;
+            float angle;
+            for (; t < 20.0f; t += 0.05f) {
+                angle = player_a - (fov / 2) + fov * (i / win_w);//start at player angle - half fov, then add 
+                float cx = player_x + t * cos(angle);
+                float cy = player_y + t * sin(angle);
+                if (map[(int)cx + (int)cy * map_w] != ' ')break;
+
+                //printf("%f\n", t);
+                size_t pix_x = cx * rect_w;
+                size_t pix_y = cy * rect_h;
+                framebuffer[pix_x + pix_y * win_w] = pack_color(255, 255, 255);
+            }
+
+            float vertLength = win_h / (t*cos(angle-player_a));
+            //printf("%f - %f C:%f\n", vertLength, i, (t * 10) / 255);
+
+            //center - half line length to keep centered
+            float startPos = win_h / 2 - vertLength / 2;
+            draw_rectangle(screenBuffer, win_w, win_h, i, startPos, 1, vertLength, pack_color(0, (t * 10), 255));
         }
 
-        float vertLength = win_h / (t + 0.01f);
-        printf("%f - %f C:%f\n", vertLength, i, (t * 10) / 255);
-        //if (vertLength > win_h)vertLength = win_h;
-        float startPos = win_h / 2 - vertLength / 2;
-        draw_rectangle(screenBuffer, win_w, win_h, i, startPos, 1, vertLength, pack_color(0, (t*10), 255));
+        //create player view file
+        drop_ppm_image(ss.str(), screenBuffer, win_w, win_h);
     }
-
-    //create images
+    //create map image file
     drop_ppm_image("./out.ppm", framebuffer, win_w, win_h);
-    drop_ppm_image("./firstPerson.ppm", screenBuffer, win_w, win_h);
     
     return 0;
 }
