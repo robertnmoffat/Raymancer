@@ -9,6 +9,9 @@
 
 #define M_PI 3.14159265358979323846264338327950288
 
+/*
+    Draws a rectangle on the passed vector representing an image
+*/
 void draw_rectangle(std::vector<uint32_t> &img, const size_t img_w, const size_t img_h, const size_t x, const size_t y, const size_t w, const size_t h, const uint32_t color){
     assert(img.size() == img_w * img_h);
     for (int i = 0; i < w; i++) {
@@ -21,10 +24,16 @@ void draw_rectangle(std::vector<uint32_t> &img, const size_t img_w, const size_t
     }
 }
 
+/*
+    packs four 8-bit color traits into a single 32-bit color
+*/
 uint32_t pack_color(const uint8_t r, const uint8_t g, const uint8_t b, const uint8_t a = 255){
     return ((a<<24)+(b<<16)+(g<<8)+(r));
 }
 
+/*
+    unpacks 32-bit color representation into 4 8-bit color traits
+*/
 void unpack_color(const uint32_t& color, uint8_t &r, uint8_t &g, uint8_t &b, uint8_t &a) {
     a = (color >> 24) & 255;
     b = (color>>16) & 255;
@@ -32,6 +41,9 @@ void unpack_color(const uint32_t& color, uint8_t &r, uint8_t &g, uint8_t &b, uin
     r = (color) & 255;
 }
 
+/*
+    saves .ppm file which is a graphic representing a passed vector of colors
+*/
 void drop_ppm_image(const std::string filename, const std::vector<uint32_t> &image, const size_t w, const size_t h){
     assert(image.size() == w*h);
 
@@ -79,6 +91,14 @@ int main()
     float player_a = 1.523f;
     float fov = M_PI/3;
 
+    //---------------------SETUP COLORS---------------------
+    size_t nColors = 10;
+    std::vector<uint32_t> colors(nColors);
+    for (int i = 0; i < nColors; i++) {
+        colors[i] = pack_color(rand() % 255, rand() % 255, rand() % 255);
+    }
+
+    //--------------------initialize map and player view arrays--------------------
     for (size_t j = 0; j < win_h; j++) {
         for (size_t i = 0; i < win_w; i++) {
             uint8_t r = 255 * j / float(win_h);//j/win_h gives percent across, multiplied by full brightness. increasing percentage of brightness across.
@@ -89,6 +109,7 @@ int main()
         }
     }
 
+    //-------------------------DRAW EACH MAP SPACE TO MAP GRAPHIC-------------------
     size_t rect_w = win_w / map_w;//pixel width of each square of the map applied to the image
     size_t rect_h = win_h / map_h;
     for (int j = 0; j < map_h; j++) {//for each map position
@@ -105,7 +126,7 @@ int main()
     //Draw player on map
     draw_rectangle(framebuffer, win_w, win_h, player_x*rect_w, player_y*rect_h, 5,5, pack_color(255,255,255));
 
-    //raycast from player view
+    //--------------------------RAYCAST FROM PLAYER VIEW-----------------------
     for (float i = 0; i < win_w; i++) {//do for window width so that you have a ray for every horizontal pixel after
         float t = 0.0f;
         for (; t < 20.0f; t += 0.05f) {
@@ -127,7 +148,7 @@ int main()
         draw_rectangle(screenBuffer, win_w, win_h, i, startPos, 1, vertLength, pack_color(0, (t*10), 255));
     }
 
-
+    //create images
     drop_ppm_image("./out.ppm", framebuffer, win_w, win_h);
     drop_ppm_image("./firstPerson.ppm", screenBuffer, win_w, win_h);
     
