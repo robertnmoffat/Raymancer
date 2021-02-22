@@ -9,6 +9,9 @@
 #include <sstream>
 #include <iomanip>
 
+#define STD_IMAGE_IMPLEMENTATION
+#include"stb_image.h"
+
 #define M_PI 3.14159265358979323846264338327950288
 
 /*
@@ -121,7 +124,11 @@ int main()
             size_t rect_x = i * rect_w;//iteration multiplied by the pixel width of a map tile
             size_t rect_y = j * rect_h;
 
-            draw_rectangle(framebuffer, win_w, win_h, rect_x, rect_y, rect_w, rect_h, pack_color(0, 255, 255));
+            size_t icolor = map[i+j*map_w]-'0';
+            assert(icolor < nColors);
+            uint32_t curColor = colors[icolor];
+
+            draw_rectangle(framebuffer, win_w, win_h, rect_x, rect_y, rect_w, rect_h, curColor);
         }
     }
 
@@ -142,10 +149,11 @@ int main()
         for (float i = 0; i < win_w; i++) {//do for window width so that you have a ray for every horizontal pixel after
             float t = 0.0f;
             float angle;
+            float cx, cy;
             for (; t < 20.0f; t += 0.05f) {
                 angle = player_a - (fov / 2) + fov * (i / win_w);//start at player angle - half fov, then add 
-                float cx = player_x + t * cos(angle);
-                float cy = player_y + t * sin(angle);
+                cx = player_x + t * cos(angle);
+                cy = player_y + t * sin(angle);
                 if (map[(int)cx + (int)cy * map_w] != ' ')break;
 
                 //printf("%f\n", t);
@@ -157,9 +165,14 @@ int main()
             float vertLength = win_h / (t*cos(angle-player_a));
             //printf("%f - %f C:%f\n", vertLength, i, (t * 10) / 255);
 
+            //get colour for current wall
+            size_t icolor = map[(int)cx + (int)cy * map_w] - '0';
+            assert(icolor < nColors);
+            uint32_t curColor = colors[icolor];
+
             //center - half line length to keep centered
             float startPos = win_h / 2 - vertLength / 2;
-            draw_rectangle(screenBuffer, win_w, win_h, i, startPos, 1, vertLength, pack_color(0, (t * 10), 255));
+            draw_rectangle(screenBuffer, win_w, win_h, i, startPos, 1, vertLength, curColor);
         }
 
         //create player view file
