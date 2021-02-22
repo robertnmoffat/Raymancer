@@ -9,7 +9,7 @@
 #include <sstream>
 #include <iomanip>
 
-#define STD_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
 #include"stb_image.h"
 
 #define M_PI 3.14159265358979323846264338327950288
@@ -34,6 +34,47 @@ void draw_rectangle(std::vector<uint32_t> &img, const size_t img_w, const size_t
 */
 uint32_t pack_color(const uint8_t r, const uint8_t g, const uint8_t b, const uint8_t a = 255){
     return ((a<<24)+(b<<16)+(g<<8)+(r));
+}
+
+/*
+    Load texture from image file using the public stbi library
+*/
+bool load_texture(const std::string filename, std::vector<uint32_t>& texture, size_t& text_size, size_t& text_cnt) {
+    int nchannels = -1, w, h;
+
+    unsigned char* pixmap = stbi_load(filename.c_str(), &w, &h, &nchannels, 0);
+    if (!pixmap) {
+        std::cerr << "Unable to load texture: " << filename << std::endl;
+        return false;
+    }
+
+    if (nchannels != 4) {
+        std::cerr << "Error: Texture file " << filename << " must be a 32-bit image." << std::endl;
+        stbi_image_free(pixmap);
+        return false;
+    }
+
+    text_cnt = w / h;
+    text_size = w / text_cnt;
+    if (w != h * (int)text_cnt) {
+        std::cerr << "Error: The texture file must be N square textures packed horizontally." << std::endl;
+        stbi_image_free(pixmap);
+        return false;
+    }
+
+    texture = std::vector<uint32_t>(w * h);
+    for (int j = 0; j < h; j++) {
+        for (int i = 0; i < w; i++) {
+            uint8_t r = pixmap[(i + j * w) * 4 + 0];
+            uint8_t g = pixmap[(i + j * w) * 4 + 1];
+            uint8_t b = pixmap[(i + j * w) * 4 + 2];
+            uint8_t a = pixmap[(i + j * w) * 4 + 3];
+            texture[i + j * w] = pack_color(r, g, b, a);
+        }
+    }
+
+    stbi_image_free(pixmap);
+    return true;
 }
 
 /*
@@ -88,7 +129,7 @@ int main()
                         "0       0      0"\
                         "0 0000000      0"\
                         "0              0"\
-                        "0002222222200000"; // our game map
+                        "0002222222200000"; // game map
     assert(sizeof(map) == map_w * map_h + 1);//+1 for null terminated string
 
     float player_x = 3.456f;
@@ -101,6 +142,15 @@ int main()
     std::vector<uint32_t> colors(nColors);
     for (int i = 0; i < nColors; i++) {
         colors[i] = pack_color(rand() % 255, rand() % 255, rand() % 255);
+    }
+
+    //--------------------LOAD TEXTURES---------------------
+    std::vector<uint32_t> wallText;
+    size_t wallText_size;//texture dimensions (square)
+    size_t wallText_cnt;//number of different textures
+    if (!load_texture("walltext.png", wallText, wallText_size, wallText_cnt)) {
+        std::cerr << "Failed to load texture." << std::endl;
+        return -1;
     }
 
     //--------------------initialize map and player view arrays--------------------
@@ -136,7 +186,7 @@ int main()
     draw_rectangle(framebuffer, win_w, win_h, player_x*rect_w, player_y*rect_h, 5,5, pack_color(255,255,255));
 
     //--------------------------RAYCAST FROM PLAYER VIEW-----------------------
-    for (int frame = 1; frame < 360; frame++) {
+    for (int frame = 1; frame < 2; frame++) {
         player_a += 2*M_PI/360;
 
         screenBuffer = std::vector<uint32_t>(win_w * win_h, pack_color(255, 255, 255));        
@@ -156,14 +206,12 @@ int main()
                 cy = player_y + t * sin(angle);
                 if (map[(int)cx + (int)cy * map_w] != ' ')break;
 
-                //printf("%f\n", t);
                 size_t pix_x = cx * rect_w;
                 size_t pix_y = cy * rect_h;
                 framebuffer[pix_x + pix_y * win_w] = pack_color(255, 255, 255);
             }
 
             float vertLength = win_h / (t*cos(angle-player_a));
-            //printf("%f - %f C:%f\n", vertLength, i, (t * 10) / 255);
 
             //get colour for current wall
             size_t icolor = map[(int)cx + (int)cy * map_w] - '0';
@@ -178,6 +226,14 @@ int main()
         //create player view file
         drop_ppm_image(ss.str(), screenBuffer, win_w, win_h);
     }
+
+    const size_t texid = 4;
+    for (size_t i = 0; i < wallText_size; i++) {
+        for (size_t j = 0; j < wallText_size; j++) {
+            framebuffer[i + j * win_w] = wallText[i + texid * wallText_size + j * wallText_size * wallText_cnt];
+        }
+    }
+
     //create map image file
     drop_ppm_image("./out.ppm", framebuffer, win_w, win_h);
     
