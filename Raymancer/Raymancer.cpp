@@ -1,6 +1,7 @@
 // Raymancer.cpp : This file contains the 'main' function. Program execution begins and ends there.
 //
 
+#define _USE_MATH_DEFINES
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -8,11 +9,36 @@
 #include <cassert>
 #include <sstream>
 #include <iomanip>
+#include <cmath>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include"stb_image.h"
 
-#define M_PI 3.14159265358979323846264338327950288
+/*
+* Extracts a column from a horizontal position of the desired texture in the passed image and stretches it to column_height 
+    img: texture image
+	texsize: image width or height (square, so same)
+	ntextures: number of textures in image
+	texid: which texture to be used
+	texcoord: which column of texture to be used
+	column_height: height of wall pixels to be drawn
+*/
+std::vector<uint32_t> texture_column(const std::vector<uint32_t>& img, const size_t texsize, const size_t ntextures, const size_t texid, const size_t texcoord, const size_t column_height) {
+    //Full image width should be texsize multiplied by amount of textures
+    const size_t img_w = texsize * ntextures;
+    const size_t img_h = texsize;
+    assert(img.size() == img_w * img_h && texcoord < texsize&& texid < ntextures);
+
+    std::vector<uint32_t> column(column_height);
+    
+    for (int y = 0; y < column_height; y++) {
+        size_t pix_x = texid * texsize + texcoord;
+        size_t pix_y = y * texsize / column_height;
+
+        column[y] = img[pix_x + pix_y * img_w];
+    }
+    return column;
+}
 
 /*
     Draws a rectangle on the passed vector representing an image
@@ -121,9 +147,9 @@ int main()
                         "0     0  1110000"\
                         "0     3        0"\
                         "0   10000      0"\
-                        "0   0   11100  0"\
-                        "0   0   0      0"\
-                        "0   0   1  00000"\
+                        "0   3   11100  0"\
+                        "5   4   0      0"\
+                        "5   4   1  00000"\
                         "0       1      0"\
                         "2       1      0"\
                         "0       0      0"\
@@ -174,11 +200,10 @@ int main()
             size_t rect_x = i * rect_w;//iteration multiplied by the pixel width of a map tile
             size_t rect_y = j * rect_h;
 
-            size_t icolor = map[i+j*map_w]-'0';
-            assert(icolor < nColors);
-            uint32_t curColor = colors[icolor];
+            size_t texid = map[i+j*map_w]-'0';
+            assert(texid < wallText_cnt);
 
-            draw_rectangle(framebuffer, win_w, win_h, rect_x, rect_y, rect_w, rect_h, curColor);
+            draw_rectangle(framebuffer, win_w, win_h, rect_x, rect_y, rect_w, rect_h, wallText[texid*wallText_size]);//texid*wallText_size = id*width to get to the first pixel of the one you want
         }
     }
 
@@ -186,7 +211,7 @@ int main()
     draw_rectangle(framebuffer, win_w, win_h, player_x*rect_w, player_y*rect_h, 5,5, pack_color(255,255,255));
 
     //--------------------------RAYCAST FROM PLAYER VIEW-----------------------
-    for (int frame = 1; frame < 2; frame++) {
+    for (int frame = 1; frame < 360; frame++) {
         player_a += 2*M_PI/360;
 
         screenBuffer = std::vector<uint32_t>(win_w * win_h, pack_color(255, 255, 255));        
@@ -200,27 +225,46 @@ int main()
             float t = 0.0f;
             float angle;
             float cx, cy;
-            for (; t < 20.0f; t += 0.05f) {
+            size_t pix_x, pix_y;
+
+            for (; t < 20.0f; t += 0.01f) {
                 angle = player_a - (fov / 2) + fov * (i / win_w);//start at player angle - half fov, then add 
                 cx = player_x + t * cos(angle);
                 cy = player_y + t * sin(angle);
-                if (map[(int)cx + (int)cy * map_w] != ' ')break;
+                if (map[(int)cx + (int)cy * map_w] != ' ')break;                
 
-                size_t pix_x = cx * rect_w;
-                size_t pix_y = cy * rect_h;
-                framebuffer[pix_x + pix_y * win_w] = pack_color(255, 255, 255);
+                pix_x = cx * rect_w;
+                pix_y = cy * rect_h;
+                framebuffer[pix_x + pix_y * win_w] = pack_color(255, 255, 255);//Drawing visual rays
             }
 
-            float vertLength = win_h / (t*cos(angle-player_a));
+            //-----------------FIND TEXTURE TEXTURE COORDINATE POSITION-----------------------
+            float hitx = cx - floor(cx + 0.5);//subtract the nearest whole to get the distance to the nearest whole
+            float hity = cy - floor(cy + 0.5);
+            int x_texcoord;
+            if(std::abs(hitx)>std::abs(hity)){//compare absolute values to see which one is further from a whole. this is the axis which the face is on.
+                x_texcoord = hitx * wallText_size;
+            }else{
+                x_texcoord = hity * wallText_size;
+            }
+            //position may be negative, and must be made positive to reference texture position
+            if (x_texcoord < 0) x_texcoord += wallText_size;
+            assert(x_texcoord>=0 && x_texcoord<(int)wallText_size);
 
-            //get colour for current wall
-            size_t icolor = map[(int)cx + (int)cy * map_w] - '0';
-            assert(icolor < nColors);
-            uint32_t curColor = colors[icolor];
+            //get texture id from current wall collision
+            size_t texid = map[(int)cx + (int)cy * map_w] - '0';
+            assert(texid < wallText_cnt);
 
-            //center - half line length to keep centered
-            float startPos = win_h / 2 - vertLength / 2;
-            draw_rectangle(screenBuffer, win_w, win_h, i, startPos, 1, vertLength, curColor);
+            size_t column_height = win_h / (t * cos(angle - player_a));
+
+            std::vector<uint32_t> column = texture_column(wallText, wallText_size, wallText_cnt, texid, x_texcoord, column_height);
+
+            pix_x = i;
+            for (size_t j = 0; j < column_height; j++) {
+                pix_y = j + win_h / 2 - column_height / 2;
+                if (pix_y < 0 || pix_y >= (int)win_w)continue;
+                screenBuffer[pix_x + pix_y * win_w] = column[j];
+            }
         }
 
         //create player view file
